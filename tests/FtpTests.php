@@ -2,12 +2,35 @@
 
 namespace League\Flysystem\Adapter;
 
+use ErrorException;
 use League\Flysystem\Config;
+
+function ftp_systype($connection)
+{
+    static $connections = [
+        'reconnect.me',
+        'dont.reconnect.me',
+    ];
+
+    if (is_string($connection) && array_key_exists($connection, $connections)) {
+        $connections[$connection]++;
+
+        if (strpos($connection, 'dont') !== false || $connections[$connection] < 2) {
+            return false;
+        }
+    }
+
+    return 'LINUX';
+}
 
 function ftp_ssl_connect($host)
 {
     if ($host === 'fail.me') {
         return false;
+    }
+
+    if ($host === 'disconnect.check') {
+        return tmpfile();
     }
 
     return $host;
@@ -50,8 +73,12 @@ function ftp_rename()
     return true;
 }
 
-function ftp_close()
+function ftp_close($connection)
 {
+    if (is_resource($connection)) {
+        return fclose($connection);
+    }
+
     return true;
 }
 
@@ -66,9 +93,25 @@ function ftp_login($connection)
     return true;
 }
 
-function ftp_chdir($connection)
+function ftp_chdir($connection, $directory)
 {
     if ($connection === 'chdir.fail') {
+        return false;
+    }
+
+    if ($directory === 'not.found') {
+        return false;
+    }
+
+    if ($directory === 'windows.not.found') {
+        return false;
+    }
+
+    if (in_array($directory, ['file1.txt', 'file2.txt', 'file3.txt', 'file4.txt', 'dir1', 'file1.with-total-line.txt', 'file1.with-invalid-line.txt'])) {
+        return false;
+    }
+
+    if ($directory === '0') {
         return false;
     }
 
@@ -103,11 +146,76 @@ function ftp_raw($connection, $command)
 
 function ftp_rawlist($connection, $directory)
 {
+    $directory = str_replace("-A ", "", $directory);
+
+    if ($directory === '/') {
+        if (getenv('FTP_CLOSE_THROW') === 'DISCONNECT_CATCH') {
+            throw new ErrorException('ftp_rawlist');
+        }
+
+        if (getenv('FTP_CLOSE_THROW') === 'DISCONNECT_RETHROW') {
+            throw new ErrorException('does not contain the correct message');
+        }
+    }
+
+    if (strpos($directory, 'recurse.manually') !== false) {
+        return [
+            'drwxr-xr-x   2 ftp      ftp          4096 Nov 24 13:59 recurse.folder',
+        ];
+    }
+
+    if (strpos($directory, 'recurse.folder') !== false) {
+        return [
+            '-rw-r--r--   1 ftp      ftp           409 Aug 19 09:01 file1.txt',
+        ];
+    }
+
     if (strpos($directory, 'fail.rawlist') !== false) {
         return false;
     }
+
     if ($directory === 'not.found') {
         return false;
+    }
+
+    if ($directory === 'windows.not.found') {
+        return ["File not found"];
+    }
+
+    if (strpos($directory, 'file1.txt') !== false) {
+        return [
+            '-rw-r--r--   1 ftp      ftp           409 Aug 19 09:01 file1.txt',
+        ];
+    }
+
+    if ($directory === '0') {
+        return [
+            '-rw-r--r--   1 ftp      ftp           409 Aug 19 09:01 0',
+        ];
+    }
+
+    if (strpos($directory, 'file2.txt') !== false) {
+        return [
+            '05-23-15  12:09PM                  684 file2.txt',
+        ];
+    }
+
+    if (strpos($directory, 'file3.txt') !== false) {
+        return [
+            '06-09-2016  12:09PM                  684 file3.txt',
+        ];
+    }
+    
+    if (strpos($directory, 'file4.txt') !== false) {
+        return [
+            '2016-05-23  12:09PM                  684 file4.txt',
+        ];
+    }
+    
+    if (strpos($directory, 'dir1') !== false) {
+        return [
+            '2015-05-23  12:09       <DIR>          dir1',
+        ];
     }
 
     if (strpos($directory, 'rmdir.nested.fail') !== false) {
@@ -135,6 +243,20 @@ function ftp_rawlist($connection, $directory)
             'drwxr-xr-x   4 ftp      ftp          4096 Feb  6 13:58 ..',
             '-rw-r--r--   1 ftp      ftp           409 Aug 19 09:01  file1.txt',
 
+        ];
+    }
+
+    if (strpos($directory, 'file1.with-total-line.txt') !== false) {
+        return [
+            'total 0',
+            '-rw-r--r--   1 ftp      ftp           409 Aug 19 09:01 file1.txt',
+        ];
+    }
+
+    if (strpos($directory, 'file1.with-invalid-line.txt') !== false) {
+        return [
+            'invalid line',
+            '-rw-r--r--   1 ftp      ftp           409 Aug 19 09:01 file1.txt',
         ];
     }
 
@@ -183,6 +305,7 @@ function ftp_mdtm($connection, $path)
             break;
     }
 }
+
 function ftp_mkdir($connection, $dirname)
 {
     if (strpos($dirname, 'mkdir.fail') !== false) {
@@ -227,6 +350,13 @@ function ftp_chmod($connection, $mode, $path)
     return true;
 }
 
+function ftp_set_option($connection, $option, $value)
+{
+    putenv('USE_PASSV_ADDREESS' . $option . '=' . ($value ? 'YES' : 'NO'));
+
+    return true;
+}
+
 class FtpTests extends \PHPUnit_Framework_TestCase
 {
     protected $options = [
@@ -240,11 +370,17 @@ class FtpTests extends \PHPUnit_Framework_TestCase
         'passive' => false,
         'username' => 'user',
         'password' => 'password',
+        'recurseManually' => false,
     ];
+
+    public function setUp()
+    {
+        putenv('FTP_CLOSE_THROW=nope');
+    }
 
     public function testInstantiable()
     {
-        if (! defined('FTP_BINARY')) {
+        if ( ! defined('FTP_BINARY')) {
             $this->markTestSkipped('The FTP_BINARY constant is not defined');
         }
 
@@ -268,6 +404,181 @@ class FtpTests extends \PHPUnit_Framework_TestCase
         $this->assertInternalType('array', $adapter->updateStream('unknowndir/file.txt', tmpfile(), new Config()));
         $this->assertInternalType('array', $adapter->getTimestamp('some/file.ext'));
     }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testManualRecursion()
+    {
+        $adapter = new Ftp($this->options);
+        $adapter->setRecurseManually(true);
+        $result = $adapter->listContents('recurse.manually', true);
+        $this->assertCount(2, $result);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testDisconnect()
+    {
+        $adapter = new Ftp(array_merge($this->options, ['host' => 'disconnect.check']));
+        $adapter->connect();
+        $this->assertTrue($adapter->isConnected());
+        $adapter->disconnect();
+        $this->assertFalse($adapter->isConnected());
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testIsConnectedTimeoutPassthu()
+    {
+        putenv('FTP_CLOSE_THROW=DISCONNECT_RETHROW');
+
+        $this->setExpectedException('ErrorException');
+        $adapter = new Ftp(array_merge($this->options, ['host' => 'disconnect.check']));
+        $adapter->connect();
+        $adapter->isConnected();
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testIsConnectedTimeout()
+    {
+        putenv('FTP_CLOSE_THROW=DISCONNECT_CATCH');
+
+        $adapter = new Ftp(array_merge($this->options, ['host' => 'disconnect.check']));
+        $adapter->connect();
+        $this->assertFalse($adapter->isConnected());
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testIgnorePassiveAddress()
+    {
+        if ( ! defined('FTP_USEPASVADDRESS')) {
+            define('FTP_USEPASVADDRESS', 2);
+        }
+
+        $this->assertFalse(getenv('USE_PASSV_ADDREESS' . FTP_USEPASVADDRESS));
+        $adapter = new Ftp(array_merge($this->options, ['ignorePassiveAddress' => true]));
+        $adapter->connect();
+        $this->assertEquals('NO', getenv('USE_PASSV_ADDREESS' . FTP_USEPASVADDRESS));
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testGetMetadataForRoot()
+    {
+        $adapter = new Ftp($this->options);
+        $metadata = $adapter->getMetadata('');
+        $expected = ['type' => 'dir', 'path' => ''];
+        $this->assertEquals($expected, $metadata);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testGetMetadata()
+    {
+        $adapter = new Ftp($this->options);
+        $metadata = $adapter->getMetadata('file1.txt');
+        $this->assertInternalType('array', $metadata);
+        $this->assertEquals('file', $metadata['type']);
+        $this->assertEquals('file1.txt', $metadata['path']);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testGetMetadataForRootFileNamedZero()
+    {
+        $adapter = new Ftp($this->options);
+        $metadata = $adapter->getMetadata('0');
+        $this->assertInternalType('array', $metadata);
+        $this->assertEquals('file', $metadata['type']);
+        $this->assertEquals('0', $metadata['path']);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testGetMetadataIgnoresInvalidTotalLine()
+    {
+        $adapter = new Ftp($this->options);
+        $metadata = $adapter->getMetadata('file1.with-total-line.txt');
+        $this->assertEquals('file1.txt', $metadata['path']);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testGetWindowsMetadata()
+    {
+        $adapter = new Ftp($this->options);
+        $metadata = $adapter->getMetadata('file2.txt');
+        $this->assertInternalType('array', $metadata);
+        $this->assertEquals('file', $metadata['type']);
+        $this->assertEquals('file2.txt', $metadata['path']);
+        $this->assertEquals(1432382940, $metadata['timestamp']);
+        $this->assertEquals('public', $metadata['visibility']);
+        $this->assertEquals(684, $metadata['size']);
+
+        $metadata = $adapter->getMetadata('file3.txt');
+        $this->assertInternalType('array', $metadata);
+        $this->assertEquals('file', $metadata['type']);
+        $this->assertEquals('file3.txt', $metadata['path']);
+        $this->assertEquals(1473163740, $metadata['timestamp']);
+        $this->assertEquals('public', $metadata['visibility']);
+        $this->assertEquals(684, $metadata['size']);
+        
+        $metadata = $adapter->getMetadata('file4.txt');
+        $this->assertInternalType('array', $metadata);
+        $this->assertEquals('file', $metadata['type']);
+        $this->assertEquals('file4.txt', $metadata['path']);
+        $this->assertEquals(1464005340, $metadata['timestamp']);
+        $this->assertEquals('public', $metadata['visibility']);
+        $this->assertEquals(684, $metadata['size']);
+        
+        $metadata = $adapter->getMetadata('dir1');
+        $this->assertEquals('dir', $metadata['type']);
+        $this->assertEquals('dir1', $metadata['path']);
+        $this->assertEquals(1432382940, $metadata['timestamp']);
+    }
+
+    /**
+     * @depends testInstantiable
+     *
+     * Some Windows FTP server return a 500 error with the message "File not found" instead of false
+     * when calling ftp_rawlist() on invalid dir
+     */
+    public function testFileNotFoundWindowMetadata()
+    {
+        $adapter = new Ftp($this->options);
+        $metadata = $adapter->getMetadata('windows.not.found');
+        $this->assertFalse($metadata);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testFileNotFoundWindows()
+    {
+        $adapter = new Ftp($this->options);
+        $this->assertFalse($adapter->has('windows.not.found'));
+        $this->assertFalse($adapter->getVisibility('windows.not.found'));
+        $this->assertFalse($adapter->getSize('windows.not.found'));
+        $this->assertFalse($adapter->getMimetype('windows.not.found'));
+        $this->assertFalse($adapter->getTimestamp('windows.not.found'));
+        $this->assertFalse($adapter->write('write.fail', 'contents', new Config()));
+        $this->assertFalse($adapter->writeStream('write.fail', tmpfile(), new Config()));
+        $this->assertFalse($adapter->update('write.fail', 'contents', new Config()));
+        $this->assertFalse($adapter->setVisibility('chmod.fail', 'private'));
+    }
+
 
     /**
      * @depends testInstantiable
@@ -372,6 +683,68 @@ class FtpTests extends \PHPUnit_Framework_TestCase
     {
         $adapter = new Ftp(['host' => 'pasv.fail', 'ssl' => true, 'root' => 'somewhere']);
         $adapter->connect();
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testItReconnects()
+    {
+        $adapter = new Ftp(['host' => 'reconnect.me', 'ssl' => true, 'root' => 'somewhere']);
+        $this->assertFalse($adapter->isConnected());
+        $this->assertNotNull($adapter->getConnection());
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testItCanSetSystemType()
+    {
+        $adapter = new Ftp($this->options);
+        $this->assertNull($adapter->getSystemType());
+        $adapter->setSystemType('unix');
+        $this->assertEquals('unix', $adapter->getSystemType());
+    }
+
+    /**
+     * @depends testInstantiable
+     * @expectedException \League\Flysystem\NotSupportedException
+     */
+    public function testItThrowsAnExceptionWhenAnInvalidSystemTypeIsSet()
+    {
+        $adapter = new Ftp($this->options + ['systemType' => 'unknown']);
+        $adapter->listContents();
+    }
+
+    /**
+     * @depends testInstantiable
+     * @expectedException \RuntimeException
+     */
+    public function testItThrowsAnExceptionWhenAnInvalidUnixListingIsFound()
+    {
+        $adapter = new Ftp($this->options + ['systemType' => 'unix']);
+        $metadata = $adapter->getMetadata('file1.with-invalid-line.txt');
+        $this->assertEquals('file1.txt', $metadata['path']);
+    }
+
+    /**
+     * @depends testInstantiable
+     */
+    public function testReadFailure()
+    {
+        $adapter = new Ftp($this->options + ['systemType' => 'unix']);
+        $this->assertFalse($adapter->read('not.found'));
+    }
+
+    /**
+     * @depends testInstantiable
+     * @expectedException \RuntimeException
+     */
+    public function testItThrowsAnExceptionWhenAnInvalidWindowsListingIsFound()
+    {
+        $adapter = new Ftp($this->options + ['systemType' => 'windows']);
+        $metadata = $adapter->getMetadata('file1.with-invalid-line.txt');
+        $this->assertEquals('file1.txt', $metadata['path']);
     }
 
     /**

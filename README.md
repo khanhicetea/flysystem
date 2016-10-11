@@ -9,6 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/league/flysystem.svg?style=flat-square)](https://packagist.org/packages/league/flysystem)
 
 [![SensioLabsInsight](https://insight.sensiolabs.com/projects/9820f1af-2fd0-4ab6-b42a-03e0c821e0af/big.png)](https://insight.sensiolabs.com/projects/9820f1af-2fd0-4ab6-b42a-03e0c821e0af)
+[![Build status](https://ci.appveyor.com/api/projects/status/ooddqdtprpnjyagy/branch/master?svg=true)](https://ci.appveyor.com/project/frankdejonge/flysystem/branch/master)
 
 Flysystem is a filesystem abstraction which allows you to easily swap out a local filesystem for a remote one.
 
@@ -21,7 +22,7 @@ Flysystem is a filesystem abstraction which allows you to easily swap out a loca
 * Emulate directories in systems that support none, like AwsS3.
 * Support third party plugins.
 * Make it easy to test your filesystem interactions.
-* Support streams for big file handling
+* Support streams for big file handling.
 
 # Installation
 
@@ -62,14 +63,17 @@ Want to get started quickly? Check out some of these integrations:
 * Cilex integration: https://github.com/WyriHaximus/cli-fly
 * Yii 2 integration: https://github.com/creocoder/yii2-flysystem
 * Backup manager: https://github.com/heybigname/backup-manager
+* Drupal: https://www.drupal.org/project/flysystem
+* elFinder: https://github.com/barryvdh/elfinder-flysystem-driver
 
 ## Adapters
 
 * Local
-* Amazon Web Services - S3: https://github.com/thephpleague/flysystem-aws-s3-v2
+* Amazon Web Services - S3 V2: https://github.com/thephpleague/flysystem-aws-s3-v2
+* Amazon Web Services - S3 V3: https://github.com/thephpleague/flysystem-aws-s3-v3
 * Rackspace Cloud Files: https://github.com/thephpleague/flysystem-rackspace
 * Dropbox: https://github.com/thephpleague/flysystem-dropbox
-* Copy: https://github.com/thephpleague/flysystem-copy
+* OneDrive: https://github.com/jacekbarecki/flysystem-onedrive
 * Ftp
 * Sftp (through phpseclib): https://github.com/thephpleague/flysystem-sftp
 * Zip (through ZipArchive): https://github.com/thephpleague/flysystem-ziparchive
@@ -77,6 +81,13 @@ Want to get started quickly? Check out some of these integrations:
 * PHPCR: https://github.com/thephpleague/flysystem-phpcr
 * Azure Blob Storage
 * NullAdapter
+* Redis (through Predis): https://github.com/danhunsaker/flysystem-redis
+* Fallback: https://github.com/Litipk/flysystem-fallback-adapter
+* Memory: https://github.com/thephpleague/flysystem-memory
+* Google Cloud Storage: https://github.com/Superbalist/flysystem-google-storage
+* SinaAppEngine Storage: https://github.com/litp/flysystem-sae-storage
+* Gaufrette: https://github.com/jenkoian/flysystem-gaufrette
+* OpenStack Swift: https://github.com/nimbusoftltd/flysystem-openstack-swift
 
 ## Caching
 
@@ -95,6 +106,6 @@ Want to get started quickly? Check out some of these integrations:
 If you discover any security related issues, please email frenky@frenky.net instead of using the issue tracker.
 
 
-# Enjoy.
+# Enjoy
 
 Oh and if you've come down this far, you might as well follow me on [twitter](http://twitter.com/frankdejonge).

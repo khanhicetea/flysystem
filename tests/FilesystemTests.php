@@ -5,10 +5,9 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\Util;
 use Prophecy\Argument;
 use Prophecy\Argument\Token\TypeToken;
-use Prophecy\PhpUnit\ProphecyTestCase;
 use Prophecy\Prophecy\ObjectProphecy;
 
-class FilesystemTests extends ProphecyTestCase
+class FilesystemTests extends \PHPUnit_Framework_TestCase
 {
     /**
      * @var ObjectProphecy
@@ -31,13 +30,19 @@ class FilesystemTests extends ProphecyTestCase
     protected $config;
 
     /**
+     * @var Config
+     */
+    private $filesystemConfig;
+
+    /**
      * @before
      */
     public function setupAdapter()
     {
         $this->prophecy = $this->prophesize('League\\Flysystem\\AdapterInterface');
         $this->adapter = $this->prophecy->reveal();
-        $this->filesystem = new Filesystem($this->adapter);
+        $this->filesystemConfig = new Config();
+        $this->filesystem = new Filesystem($this->adapter, $this->filesystemConfig);
         $this->config = Argument::type('League\\Flysystem\\Config');
     }
 
@@ -62,6 +67,15 @@ class FilesystemTests extends ProphecyTestCase
         $path = 'path.txt';
         $contents = 'contents';
         $this->prophecy->has($path)->willReturn(false);
+        $this->prophecy->write($path, $contents, $this->config)->willReturn(compact('path', 'contents'));
+        $this->assertTrue($this->filesystem->write($path, $contents));
+    }
+
+    public function testWriteWithoutAsserts()
+    {
+        $this->filesystemConfig->set('disable_asserts', true);
+        $path = 'path.txt';
+        $contents = 'contents';
         $this->prophecy->write($path, $contents, $this->config)->willReturn(compact('path', 'contents'));
         $this->assertTrue($this->filesystem->write($path, $contents));
     }
@@ -133,6 +147,12 @@ class FilesystemTests extends ProphecyTestCase
         fclose($stream);
     }
 
+    public function testPutStreamInvalid()
+    {
+        $this->setExpectedException('InvalidArgumentException');
+        $this->filesystem->putStream('path.txt', '__INVALID__');
+    }
+
     public function testWriteStreamInvalid()
     {
         $this->setExpectedException('InvalidArgumentException');
@@ -198,8 +218,7 @@ class FilesystemTests extends ProphecyTestCase
     {
         $old = 'old.txt';
         $new = 'new.txt';
-        $this->prophecy->has($old)->willReturn(true);
-        $this->prophecy->has($new)->willReturn(false);
+        $this->prophecy->has(Argument::any())->willReturn(true, false);
         $this->prophecy->rename($old, $new)->willReturn(true);
         $response = $this->filesystem->rename($old, $new);
         $this->assertTrue($response);
@@ -209,8 +228,17 @@ class FilesystemTests extends ProphecyTestCase
     {
         $old = 'old.txt';
         $new = 'new.txt';
-        $this->prophecy->has($old)->willReturn(true);
-        $this->prophecy->has($new)->willReturn(false);
+        $this->prophecy->has(Argument::any())->willReturn(true, false);
+        $this->prophecy->copy($old, $new)->willReturn(true);
+        $response = $this->filesystem->copy($old, $new);
+        $this->assertTrue($response);
+    }
+
+    public function testCopyWithoutAsserts()
+    {
+        $old = 'old.txt';
+        $new = 'new.txt';
+        $this->filesystemConfig->set('disable_asserts', true);
         $this->prophecy->copy($old, $new)->willReturn(true);
         $response = $this->filesystem->copy($old, $new);
         $this->assertTrue($response);
@@ -347,15 +375,69 @@ class FilesystemTests extends ProphecyTestCase
            ['path' => 'other_root/file.txt'],
            ['path' => 'valid/to_deep/file.txt'],
            ['path' => 'valid/file.txt'],
+           ['path' => 'valid/a-valid-file.txt'],
         ];
 
         $expected = [
+            Util::pathinfo('valid/a-valid-file.txt'),
             Util::pathinfo('valid/file.txt'),
         ];
 
         $this->prophecy->listContents('valid', false)->willReturn($rawListing);
         $output = $this->filesystem->listContents('valid', false);
         $this->assertEquals($expected, $output);
+    }
+
+    public function testListContentZeroName()
+    {
+        $rawListing = [
+            // files
+            ['path' => 0],
+            ['path' => '0'],
+            ['path' => ''],
+            // directories
+            ['path' => 0, 'type' => 'dir'],
+            ['path' => '0', 'type' => 'dir'],
+            ['path' => '', 'type' => 'dir']
+        ];
+        $this->prophecy->listContents('', false)->willReturn($rawListing);
+        $output = $this->filesystem->listContents('', false);
+        $this->assertCount(2, $output);
+    }
+
+    public function testListContentsRecursize()
+    {
+        $rawListing = [
+           ['path' => 'other_root/file.txt'],
+           ['path' => 'valid/to_deep/file.txt'],
+           ['path' => 'valid/file.txt'],
+           ['path' => 'valid/a-valid-file.txt'],
+        ];
+        $expected = [
+            Util::pathinfo('valid/a-valid-file.txt'),
+            Util::pathinfo('valid/file.txt'),
+            Util::pathinfo('valid/to_deep/file.txt'),
+        ];
+        $this->prophecy->listContents('valid', true)->willReturn($rawListing);
+        $output = $this->filesystem->listContents('valid', true);
+        $this->assertEquals($expected, $output);
+
+        $expected = [
+            Util::pathinfo('other_root/file.txt'),
+            Util::pathinfo('valid/a-valid-file.txt'),
+            Util::pathinfo('valid/file.txt'),
+            Util::pathinfo('valid/to_deep/file.txt'),
+        ];
+        $this->prophecy->listContents('', true)->willReturn($rawListing);
+        $output = $this->filesystem->listContents('', true);
+        $this->assertEquals($expected, $output);
+    }
+    public function testListContentsSubDirectoryMatches()
+    {
+        $rawListing = [['path' => 'a/dir/file.txt']];
+        $this->prophecy->listContents('dir', true)->willReturn($rawListing);
+        $output = $this->filesystem->listContents('dir', true);
+        $this->assertEquals([], $output);
     }
 
     public function testInvalidPluginCall()

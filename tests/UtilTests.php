@@ -7,8 +7,8 @@ class UtilTests extends \PHPUnit_Framework_TestCase
     public function testEmulateDirectories()
     {
         $input = [
-            ['dirname' => '', 'filename' => 'dummy'],
-            ['dirname' => 'something', 'filename' => 'dummy'],
+            ['dirname' => '', 'filename' => 'dummy', 'path' => 'dummy', 'type' => 'file'],
+            ['dirname' => 'something', 'filename' => 'dummy', 'path' => 'something/dummy', 'type' => 'file'],
             ['dirname' => 'something', 'path' => 'something/dirname', 'type' => 'dir'],
         ];
         $output = Util::emulateDirectories($input);
@@ -92,6 +92,8 @@ class UtilTests extends \PHPUnit_Framework_TestCase
     public function pathProvider()
     {
         return [
+            ['.', ''],
+            ['/path/to/dir/.', 'path/to/dir'],
             ['/dirname/', 'dirname'],
             ['dirname/..', ''],
             ['dirname/../', ''],
@@ -105,6 +107,7 @@ class UtilTests extends \PHPUnit_Framework_TestCase
             ['\\\\some\shared\\\\drive', 'some\shared\drive'],
             ['C:\dirname\\\\subdir\\\\\\subsubdir', 'C:\dirname\subdir\subsubdir'],
             ['C:\\\\dirname\subdir\\\\subsubdir', 'C:\dirname\subdir\subsubdir'],
+            ['example/path/..txt', 'example/path/..txt'],
         ];
     }
 
@@ -114,12 +117,15 @@ class UtilTests extends \PHPUnit_Framework_TestCase
     public function testNormalizePath($input, $expected)
     {
         $result = Util::normalizePath($input);
+        $double = Util::normalizePath(Util::normalizePath($input));
         $this->assertEquals($expected, $result);
+        $this->assertEquals($expected, $double);
     }
 
     public function pathAndContentProvider()
     {
         return [
+            ['/some/file.css', '.event { background: #000; } ', 'text/css'],
             ['/some/file.css', 'body { background: #000; } ', 'text/css'],
             ['/some/file.txt', 'body { background: #000; } ', 'text/plain'],
             ['/1x1', base64_decode('R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='), 'image/gif'],

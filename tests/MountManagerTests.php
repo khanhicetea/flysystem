@@ -7,7 +7,7 @@ class MountManagerTests extends PHPUnit_Framework_TestCase
 {
     public function testInstantiable()
     {
-        $manager = new MountManager();
+        new MountManager();
     }
 
     public function testConstructorInjection()
@@ -76,7 +76,7 @@ class MountManagerTests extends PHPUnit_Framework_TestCase
         $filename = 'test.txt';
         $buffer = tmpfile();
         $fs1->shouldReceive('readStream')->once()->with($filename)->andReturn($buffer);
-        $fs2->shouldReceive('writeStream')->once()->with($filename, $buffer)->andReturn(true);
+        $fs2->shouldReceive('writeStream')->once()->with($filename, $buffer, [])->andReturn(true);
         $response = $manager->copy("fs1://{$filename}", "fs2://{$filename}");
         $this->assertTrue($response);
 
@@ -87,13 +87,13 @@ class MountManagerTests extends PHPUnit_Framework_TestCase
 
         $buffer = tmpfile();
         $fs1->shouldReceive('readStream')->once()->with($filename)->andReturn($buffer);
-        $fs2->shouldReceive('writeStream')->once()->with($filename, $buffer)->andReturn(false);
+        $fs2->shouldReceive('writeStream')->once()->with($filename, $buffer, [])->andReturn(false);
         $status = $manager->copy("fs1://{$filename}", "fs2://{$filename}");
         $this->assertFalse($status);
 
         $buffer = tmpfile();
         $fs1->shouldReceive('readStream')->once()->with($filename)->andReturn($buffer);
-        $fs2->shouldReceive('writeStream')->once()->with($filename, $buffer)->andReturn(true);
+        $fs2->shouldReceive('writeStream')->once()->with($filename, $buffer, [])->andReturn(true);
         $status = $manager->copy("fs1://{$filename}", "fs2://{$filename}");
         $this->assertTrue($status);
     }
@@ -109,11 +109,11 @@ class MountManagerTests extends PHPUnit_Framework_TestCase
         $filename = 'test.txt';
         $buffer = tmpfile();
         $fs1->shouldReceive('readStream')->with($filename)->andReturn($buffer);
-        $fs2->shouldReceive('writeStream')->with($filename, $buffer)->andReturn(false);
+        $fs2->shouldReceive('writeStream')->with($filename, $buffer, [])->andReturn(false);
         $code = $manager->move("fs1://{$filename}", "fs2://{$filename}");
         $this->assertFalse($code);
 
-        $manager->shouldReceive('copy')->with("fs1://{$filename}", "fs2://{$filename}")->andReturn(true);
+        $manager->shouldReceive('copy')->with("fs1://{$filename}", "fs2://{$filename}", [])->andReturn(true);
         $manager->shouldReceive('delete')->with("fs1://{$filename}")->andReturn(true);
         $code = $manager->move("fs1://{$filename}", "fs2://{$filename}");
 
@@ -161,5 +161,22 @@ class MountManagerTests extends PHPUnit_Framework_TestCase
         $mock->shouldReceive('listWith')->with(['timestamp'], 'file.ext', false)->once()->andReturn($response);
         $manager->mountFilesystem('prot', $mock);
         $this->assertEquals($response, $manager->listWith(['timestamp'], 'prot://file.ext', false));
+    }
+
+    public function provideMountSchemas()
+    {
+        return [['with.dot'], ['with-dash'], ['with+plus'], ['with:colon']];
+    }
+
+    /**
+     * @dataProvider provideMountSchemas
+     */
+    public function testMountSchemaTypes($schema)
+    {
+        $manager = new MountManager();
+        $mock = Mockery::mock('League\Flysystem\FilesystemInterface');
+        $mock->shouldReceive('aMethodCall')->once()->andReturn('a result');
+        $manager->mountFilesystem($schema, $mock);
+        $this->assertEquals($manager->aMethodCall($schema . '://file.ext'), 'a result');
     }
 }
